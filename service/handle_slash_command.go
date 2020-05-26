@@ -15,7 +15,7 @@ import (
 )
 
 func getUsageString() string {
-	return fmt.Sprintf("Usage: %s https://www.instagram.com/p/....", slashCommand)
+	return fmt.Sprintf("Usage: `%s [instagram-url]`", slashCommand)
 }
 
 func (h *handler) handleSlashCommand(ctx context.Context, body url.Values) *slack.Msg {
