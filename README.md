@@ -1,6 +1,12 @@
 # slack-instagram
 Lambda function to post instagrams to Slack
 
+## Usage
+
+`/insta [url]`
+
+Will post a large image and a link to the post. Will also indicate if the post is a video.
+
 ## Deployment
 
 1. Compile with `GOOS=linux`, add binary to zip, create a lambda function using Go engine.
