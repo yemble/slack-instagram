@@ -3,9 +3,16 @@ Lambda function to post instagrams to Slack
 
 ## Usage
 
-`/insta [url]`
+`/insta <url> [image number]`
 
-Will post a large image and a link to the post. Will also indicate if the post is a video.
+Will post a large image and a link to the post.
+
+* Optional image selection argument.
+* Indicates number of photos and whether post is video or not.
+
+## Test
+
+`go test ./...`
 
 ## Deployment
 
