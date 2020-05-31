@@ -56,7 +56,7 @@ func (h *handler) Invoke(ctx context.Context, payload []byte) ([]byte, error) {
 	if err := json.Unmarshal(payload, apiReq); err == nil && len(apiReq.Body) > 0 {
 		resp, err := h.handleAPIRequest(ctx, apiReq)
 		if err != nil {
-			log.Printf("Error from api request handler: %w", err)
+			log.Printf("Error from api request handler: %s", err)
 			return nil, err
 		}
 
@@ -69,7 +69,7 @@ func (h *handler) Invoke(ctx context.Context, payload []byte) ([]byte, error) {
 	if err := json.Unmarshal(payload, sqsEvent); err == nil && len(sqsEvent.Records) > 0 {
 		err := h.handleSQSEvent(ctx, sqsEvent)
 		if err != nil {
-			log.Printf("Error from sqs event handler: %w", err)
+			log.Printf("Error from sqs event handler: %s", err)
 		}
 
 		return nil, err

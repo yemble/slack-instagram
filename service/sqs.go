@@ -24,9 +24,10 @@ type SQSSlackMessage struct {
 }
 
 type SlashMessage struct {
-	InstagramURL string `json:"instagram_url"`
-	ResponseURL  string `json:"response_url"`
-	UserID       string `jsoin:"user_id"`
+	InstagramURL  string `json:"instagram_url"`
+	SelectedIndex int    `json:"selected_index,omitempty"`
+	ResponseURL   string `json:"response_url"`
+	UserID        string `jsoin:"user_id"`
 }
 
 func (h *handler) enqueueMessage(ctx context.Context, ssMsg *SQSSlackMessage) error {
@@ -75,6 +76,6 @@ func (h *handler) handleSQSMessage(ctx context.Context, sqsMsg events.SQSMessage
 		ReceiptHandle: aws.String(sqsMsg.ReceiptHandle),
 	}
 	if _, err = h.sqs.DeleteMessageWithContext(ctx, input); err != nil {
-		log.Println("Error deleting sqs message %s: %s", sqsMsg.ReceiptHandle, err)
+		log.Printf("Error deleting sqs message %s: %s", sqsMsg.ReceiptHandle, err)
 	}
 }

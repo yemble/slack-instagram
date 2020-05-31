@@ -70,7 +70,7 @@ func (h *handler) processSQSUnfurlMessage(ctx context.Context, msg *SQSSlackMess
 	evt := msg.UnfurlEvent.Event
 
 	for _, link := range evt.Links {
-		meta, err := h.fetchInsta(ctx, link.URL)
+		meta, err := h.fetchInsta(ctx, link.URL, 0)
 
 		if err != nil {
 			log.Printf("Error while fetching data from %s: %s", link.URL, err)

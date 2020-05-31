@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -12,27 +13,19 @@ import (
 )
 
 type InstaMeta struct {
-	Title    string
-	URL      string
-	ImageURL string
-	HasVideo bool
+	Title      string
+	URL        string
+	ImageURL   string
+	ImageCount int
+	HasVideo   bool
 }
 
-func getMetaFromResponse(resp *http.Response, fetchedURL string) (*InstaMeta, error) {
-	if resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("Unexpected status: %d", resp.StatusCode)
-	}
-
-	data, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("Error reading data: %w", err)
-	}
-
+func getOGMeta(data []byte) (*InstaMeta, error) {
 	metaPattern := regexp.MustCompile(`<meta property="(.+?)" content="(.+?)" />`)
 
 	matches := metaPattern.FindAllSubmatch(data, -1)
 	if matches == nil {
-		log.Println("Failed to match metadata in: %s", string(data)[0:300])
+		log.Printf("Failed to match metadata in: %s", string(data)[0:300])
 		return nil, fmt.Errorf("Error parsing instagram response, no metadata found")
 	}
 
@@ -50,35 +43,76 @@ func getMetaFromResponse(resp *http.Response, fetchedURL string) (*InstaMeta, er
 	}
 
 	if meta.ImageURL == "" {
-		// fall back to scraping javascript
-
-		meta.ImageURL, err = getDisplayURL(data)
-		if err != nil {
-			return meta, fmt.Errorf("Error parsing instagram response, no meta or display_url")
-		}
-
-		meta.URL = fetchedURL
-
-		title, _ := getDocTitle(data)
-		titleLines := strings.Split(title, "\n")
-		meta.Title = titleLines[0]
-
+		return nil, fmt.Errorf("No image url in og meta")
 	}
-
-	meta.HasVideo = hasVideo(data)
 
 	return meta, nil
 }
 
-func getDisplayURL(data []byte) (string, error) {
-	p := regexp.MustCompile(`(?s)"display_url":"(.+?)"`)
-
-	if match := p.FindSubmatch(data); match != nil {
-		raw := string(match[1])
-		return strings.Replace(raw, `\u0026`, `&`, -1), nil
+func getMetaFromResponse(resp *http.Response, fetchedURL string, instaOffset int) (*InstaMeta, error) {
+	if resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("Unexpected status: %d", resp.StatusCode)
 	}
 
-	return "", fmt.Errorf("not found")
+	data, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("Error reading data: %w", err)
+	}
+
+	/*m, err := getOGMeta(data)
+	if err == nil {
+		return m, nil
+	}*/
+
+	meta := &InstaMeta{}
+
+	title, _ := getDocTitle(data)
+	titleLines := strings.Split(title, "\n")
+	meta.Title = titleLines[0]
+
+	meta.URL = fetchedURL
+
+	// get json from body, parse and extract imates
+
+	ad, err := parseAdditionalData(data)
+	if err != nil {
+		return meta, fmt.Errorf("Error parsing instagram response, no metadata or additional data")
+	}
+
+	scm := ad.GraphQL.ShortcodeMedia
+
+	meta.HasVideo = scm.IsVideo
+
+	if scm.EdgeSideCarToChildren != nil {
+		meta.ImageCount = len(scm.EdgeSideCarToChildren.Edges)
+
+		if len(scm.EdgeSideCarToChildren.Edges) > instaOffset {
+			meta.ImageURL = scm.EdgeSideCarToChildren.Edges[instaOffset].Node.DisplayURL
+		}
+	} else {
+		meta.ImageCount = 1
+	}
+
+	if meta.ImageURL == "" {
+		meta.ImageURL = scm.DisplayURL
+	}
+
+	return meta, nil
+}
+
+func parseAdditionalData(data []byte) (*InstagramAdditionalData, error) {
+	p := regexp.MustCompile(`(?s)({"graphql":{"shortcode_media":.+?)\);?</script>`)
+
+	if match := p.FindSubmatch(data); match != nil {
+		ad := &InstagramAdditionalData{}
+		if err := json.Unmarshal(match[1], ad); err != nil {
+			return nil, err
+		}
+
+		return ad, nil
+	}
+
+	return nil, fmt.Errorf("json not found")
 }
 
 func getDocTitle(data []byte) (string, error) {
@@ -92,17 +126,7 @@ func getDocTitle(data []byte) (string, error) {
 	return "", fmt.Errorf("not found")
 }
 
-func hasVideo(data []byte) bool {
-	p := regexp.MustCompile(`"is_video":true`)
-
-	if match := p.FindSubmatch(data); match != nil {
-		return true
-	}
-
-	return false
-}
-
-func (h *handler) fetchInsta(ctx context.Context, instaURL string) (*InstaMeta, error) {
+func (h *handler) fetchInsta(ctx context.Context, instaURL string, instaOffset int) (*InstaMeta, error) {
 	client := &http.Client{
 		Timeout: externalTimeout,
 	}
@@ -124,7 +148,7 @@ func (h *handler) fetchInsta(ctx context.Context, instaURL string) (*InstaMeta, 
 
 	log.Printf("Request for %s done, parsing meta data..", instaURL)
 
-	meta, err := getMetaFromResponse(resp, instaURL)
+	meta, err := getMetaFromResponse(resp, instaURL, instaOffset)
 	if err != nil {
 		return nil, err
 	}

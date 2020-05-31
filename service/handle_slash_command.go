@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,7 +16,7 @@ import (
 )
 
 func getUsageString() string {
-	return fmt.Sprintf("Usage: `%s [instagram-url]`", slashCommand)
+	return fmt.Sprintf("Usage: `%s <instagram-url> [photo-number](optional)`", slashCommand)
 }
 
 func (h *handler) handleSlashCommand(ctx context.Context, body url.Values) *slack.Msg {
@@ -23,6 +24,8 @@ func (h *handler) handleSlashCommand(ctx context.Context, body url.Values) *slac
 		text        = strings.TrimSpace(body.Get("text"))
 		responseURL = body.Get("response_url")
 		userID      = body.Get("user_id")
+		instaURL    string
+		instaOffset int
 	)
 
 	log.Printf("Got slash command '%s' from %s", text, userID)
@@ -37,17 +40,31 @@ func (h *handler) handleSlashCommand(ctx context.Context, body url.Values) *slac
 	}
 
 	s := strings.Split(text, " ")
-	if len(s) < 1 {
+	if len(s) < 1 || len(s) > 2 {
 		return simpleEphemeralMessage(getUsageString())
+	}
+
+	instaURL = s[0]
+
+	if len(s) > 1 {
+		n, err := strconv.Atoi(s[1])
+		if err != nil {
+			return simpleEphemeralMessage(getUsageString())
+		}
+
+		if n > 0 {
+			instaOffset = n - 1
+		}
 	}
 
 	ssMsg := &SQSSlackMessage{
 		RequestTimestamp: time.Now().Unix(),
 		Type:             SQSMessageTypeSlash,
 		SlashMessage: &SlashMessage{
-			ResponseURL:  responseURL,
-			UserID:       userID,
-			InstagramURL: s[0],
+			ResponseURL:   responseURL,
+			UserID:        userID,
+			InstagramURL:  instaURL,
+			SelectedIndex: instaOffset,
 		},
 	}
 
@@ -60,7 +77,7 @@ func (h *handler) handleSlashCommand(ctx context.Context, body url.Values) *slac
 }
 
 func (h *handler) processSQSSlashMessage(ctx context.Context, msg *SQSSlackMessage) {
-	meta, err := h.fetchInsta(ctx, msg.SlashMessage.InstagramURL)
+	meta, err := h.fetchInsta(ctx, msg.SlashMessage.InstagramURL, msg.SlashMessage.SelectedIndex)
 
 	if err != nil {
 		log.Printf("Error while fetching data from %s: %s", msg.SlashMessage.InstagramURL, err)
@@ -77,7 +94,9 @@ func (h *handler) slashResponse(userID string, meta *InstaMeta) *slack.Msg {
 	text := fmt.Sprintf("<@%s> shared this instagram post", userID)
 
 	if meta.HasVideo {
-		text = fmt.Sprintf("%s (contains video)", text)
+		text = fmt.Sprintf("%s (video)", text)
+	} else if meta.ImageCount > 1 {
+		text = fmt.Sprintf("%s (%d images)", text, meta.ImageCount)
 	}
 
 	return &slack.Msg{
