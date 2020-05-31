@@ -80,7 +80,6 @@ func (h *handler) Invoke(ctx context.Context, payload []byte) ([]byte, error) {
 }
 
 func (h *handler) handleAPIRequest(ctx context.Context, evt *events.APIGatewayProxyRequest) (*events.APIGatewayProxyResponse, error) {
-	var err error
 	var bodyString string
 
 	if evt.IsBase64Encoded {
@@ -100,57 +99,70 @@ func (h *handler) handleAPIRequest(ctx context.Context, evt *events.APIGatewayPr
 
 	if ct == "application/x-www-form-urlencoded" {
 		// slash command
-		var bodyValues url.Values
-
-		bodyValues, err = url.ParseQuery(bodyString)
-		if err != nil {
-			return NewSlackTextResponse(400, "Bad slack api request body"), err
-		}
-
-		tkn := bodyValues.Get("token")
-		if info := h.config.TeamByRequestToken(tkn); info == nil {
-			return NewSlackTextResponse(400, fmt.Sprintf("Bad slack api request token (%s)", tkn)), nil
-		}
-
-		cmd := bodyValues.Get("command")
-		if cmd != slashCommand {
-			return NewSlackTextResponse(400, fmt.Sprintf("Unexpected slack api /command (%s)", cmd)), nil
-		}
-
-		msg := h.handleSlashCommand(ctx, bodyValues)
-
-		return NewSlackMessageResponse(200, msg), nil
-
+		return h.handleAPIFormRequest(ctx, bodyString)
 	} else if ct == "application/json" {
-		// challenge?
-		challengeReq := &ChallengeRequest{}
-		if err := json.Unmarshal([]byte(bodyString), challengeReq); err == nil && challengeReq.Type == "url_verification" {
-			tkn := challengeReq.Token
-			if info := h.config.TeamByRequestToken(tkn); info == nil {
-				return NewAPIResponse(400, "text/plain", fmt.Sprintf("Bad slack api request token (%s)", tkn)), nil
-			}
-
-			return NewAPIResponse(200, "text/plain", challengeReq.Challenge), nil
+		// challenge or event
+		resp, err := h.handleAPIJSONRequest(ctx, bodyString)
+		if err == nil {
+			return resp, nil
 		}
 
-		// event?
-		msg := &UnfurlEvent{}
-		if err := json.Unmarshal([]byte(bodyString), msg); err == nil && msg.Type == "event_callback" {
-			tkn := msg.Token
-			if info := h.config.TeamByRequestToken(tkn); info == nil {
-				return NewAPIResponse(400, "text/plain", fmt.Sprintf("Bad slack api request token (%s)", tkn)), nil
-			}
-
-			if err = h.handleEventCallback(ctx, msg); err != nil {
-				return NewAPIResponse(500, "text/plain", "Error handling event"), nil
-			}
-
-			return NewAPIResponse(200, "text/plain", "Handling event"), nil
-		}
+		log.Printf("Error: %s", err)
 	}
 
-	log.Println("Unhandled request")
+	log.Printf("Unhandled request")
 	return NewAPIResponse(400, "text/plain", "Unsupported request"), nil
+}
+
+func (h *handler) handleAPIFormRequest(ctx context.Context, bodyString string) (*events.APIGatewayProxyResponse, error) {
+	bodyValues, err := url.ParseQuery(bodyString)
+	if err != nil {
+		return NewSlackTextResponse(400, "Bad slack api request body"), err
+	}
+
+	tkn := bodyValues.Get("token")
+	if info := h.config.TeamByRequestToken(tkn); info == nil {
+		return NewSlackTextResponse(400, fmt.Sprintf("Bad slack api request token (%s)", tkn)), nil
+	}
+
+	cmd := bodyValues.Get("command")
+	if cmd != slashCommand {
+		return NewSlackTextResponse(400, fmt.Sprintf("Unexpected slack api /command (%s)", cmd)), nil
+	}
+
+	msg := h.handleSlashCommand(ctx, bodyValues)
+
+	return NewSlackMessageResponse(200, msg), nil
+}
+
+func (h *handler) handleAPIJSONRequest(ctx context.Context, bodyString string) (*events.APIGatewayProxyResponse, error) {
+	// challenge?
+	challengeReq := &ChallengeRequest{}
+	if err := json.Unmarshal([]byte(bodyString), challengeReq); err == nil && challengeReq.Type == "url_verification" {
+		tkn := challengeReq.Token
+		if info := h.config.TeamByRequestToken(tkn); info == nil {
+			return NewAPIResponse(400, "text/plain", fmt.Sprintf("Bad slack api request token (%s)", tkn)), nil
+		}
+
+		return NewAPIResponse(200, "text/plain", challengeReq.Challenge), nil
+	}
+
+	// event?
+	msg := &UnfurlEvent{}
+	if err := json.Unmarshal([]byte(bodyString), msg); err == nil && msg.Type == "event_callback" {
+		tkn := msg.Token
+		if info := h.config.TeamByRequestToken(tkn); info == nil {
+			return NewAPIResponse(400, "text/plain", fmt.Sprintf("Bad slack api request token (%s)", tkn)), nil
+		}
+
+		if err = h.handleEventCallback(ctx, msg); err != nil {
+			return NewAPIResponse(500, "text/plain", "Error handling event"), nil
+		}
+
+		return NewAPIResponse(200, "text/plain", "Handling event"), nil
+	}
+
+	return nil, fmt.Errorf("Unsupported json request")
 }
 
 func (h *handler) handleSQSEvent(ctx context.Context, evt *events.SQSEvent) error {
