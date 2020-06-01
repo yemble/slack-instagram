@@ -93,10 +93,18 @@ func (h *handler) processSQSSlashMessage(ctx context.Context, msg *SQSSlackMessa
 func (h *handler) slashResponse(userID string, meta *InstaMeta) *slack.Msg {
 	text := fmt.Sprintf("<@%s> shared this instagram post", userID)
 
-	if meta.HasVideo {
-		text = fmt.Sprintf("%s (video)", text)
-	} else if meta.ImageCount > 1 {
-		text = fmt.Sprintf("%s (%d images)", text, meta.ImageCount)
+	extra := make([]string, 0, 0)
+
+	if meta.ImageIsVideo {
+		extra = append(extra, "video")
+	}
+
+	if meta.PartCount > 1 {
+		extra = append(extra, fmt.Sprintf("%d parts", meta.PartCount))
+	}
+
+	if len(extra) > 0 {
+		text = fmt.Sprintf("%s (%s)", text, strings.Join(extra, ", "))
 	}
 
 	return &slack.Msg{

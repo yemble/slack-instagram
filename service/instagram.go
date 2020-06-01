@@ -13,11 +13,11 @@ import (
 )
 
 type InstaMeta struct {
-	Title      string
-	URL        string
-	ImageURL   string
-	ImageCount int
-	HasVideo   bool
+	Title        string
+	URL          string
+	ImageURL     string
+	ImageIsVideo bool
+	PartCount    int
 }
 
 func getOGMeta(data []byte) (*InstaMeta, error) {
@@ -72,7 +72,7 @@ func getMetaFromResponse(resp *http.Response, fetchedURL string, instaOffset int
 
 	meta.URL = fetchedURL
 
-	// get json from body, parse and extract imates
+	// get json from body, parse and extract data
 
 	ad, err := parseAdditionalData(data)
 	if err != nil {
@@ -81,20 +81,19 @@ func getMetaFromResponse(resp *http.Response, fetchedURL string, instaOffset int
 
 	scm := ad.GraphQL.ShortcodeMedia
 
-	meta.HasVideo = scm.IsVideo
-
-	if scm.EdgeSideCarToChildren != nil {
-		meta.ImageCount = len(scm.EdgeSideCarToChildren.Edges)
-
-		if len(scm.EdgeSideCarToChildren.Edges) > instaOffset {
-			meta.ImageURL = scm.EdgeSideCarToChildren.Edges[instaOffset].Node.DisplayURL
-		}
+	if scm.EdgeSideCarToChildren == nil {
+		meta.PartCount = 1
 	} else {
-		meta.ImageCount = 1
+		meta.PartCount = len(scm.EdgeSideCarToChildren.Edges)
 	}
 
-	if meta.ImageURL == "" {
+	if scm.EdgeSideCarToChildren == nil || instaOffset >= len(scm.EdgeSideCarToChildren.Edges) || instaOffset < 0 {
 		meta.ImageURL = scm.DisplayURL
+		meta.ImageIsVideo = scm.IsVideo
+	} else {
+		node := scm.EdgeSideCarToChildren.Edges[instaOffset].Node
+		meta.ImageURL = node.DisplayURL
+		meta.ImageIsVideo = node.IsVideo
 	}
 
 	return meta, nil

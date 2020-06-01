@@ -9,8 +9,8 @@ type InstagramGraphQL struct {
 }
 
 type InstagramShortcodeMedia struct {
-	IsVideo               bool                  `json:"is_video,omitempty"`
 	DisplayURL            string                `json:"display_url"`
+	IsVideo               bool                  `json:"is_video,omitempty"`
 	EdgeSideCarToChildren *InstagramEdgeSideCar `json:"edge_sidecar_to_children,omitempty"`
 }
 
@@ -24,4 +24,5 @@ type InstagramEdge struct {
 
 type InstagramNode struct {
 	DisplayURL string `json:"display_url"`
+	IsVideo    bool   `json:"is_video,omitempty"`
 }
