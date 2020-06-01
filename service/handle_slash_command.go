@@ -112,9 +112,12 @@ func (h *handler) slashResponse(userID string, meta *InstaMeta) *slack.Msg {
 		Text:         text,
 		Attachments: []slack.Attachment{
 			slack.Attachment{
-				Title:     meta.Title,
-				TitleLink: meta.URL,
-				ImageURL:  meta.ImageURL,
+				Title:      meta.Title,
+				TitleLink:  meta.URL,
+				ImageURL:   meta.ImageURL,
+				Footer:     fmt.Sprintf("@%s", meta.Username),
+				FooterIcon: meta.UserPicURL,
+				Fallback:   fmt.Sprintf("%s by @%s (%s)", meta.URL, meta.Username, meta.Title),
 			},
 		},
 	}

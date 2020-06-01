@@ -13,6 +13,8 @@ import (
 )
 
 type InstaMeta struct {
+	Username     string
+	UserPicURL   string
 	Title        string
 	URL          string
 	ImageURL     string
@@ -80,6 +82,9 @@ func getMetaFromResponse(resp *http.Response, fetchedURL string, instaOffset int
 	}
 
 	scm := ad.GraphQL.ShortcodeMedia
+
+	meta.Username = scm.Owner.Username
+	meta.UserPicURL = scm.Owner.ProfilePicURL
 
 	if scm.EdgeSideCarToChildren == nil {
 		meta.PartCount = 1
